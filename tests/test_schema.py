@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from servo_current_detection.schema import DataValidationError, JOINTS, validate_frame
+from servo_current_detection.schema import JOINTS, DataValidationError, validate_frame
 
 
 def sample_frame():
