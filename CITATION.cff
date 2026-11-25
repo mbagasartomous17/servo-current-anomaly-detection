@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the repository and identify the exact version or commit."
+title: "Servo Current Anomaly Detection"
+authors:
+  - family-names: "Pratama"
+    given-names: "Mochammad Bagas Sandika"
+version: 0.1.0
+date-released: 2026-11-25
+license: MIT
+type: software
