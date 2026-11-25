@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "servo-current-anomaly-detection"
-version = "0.2.0"
+version = "0.2.1"
 description = "A research toolkit for phase-aware anomaly detection in multichannel servo motor current signals."
 readme = "README.md"
 requires-python = ">=3.10"

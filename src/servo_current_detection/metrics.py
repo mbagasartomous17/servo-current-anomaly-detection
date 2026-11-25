@@ -77,12 +77,12 @@ def evaluate(
         )
         summary.append({
             "station_id": str(station),
-            "normal_cycles": int(len(normal)),
+            "normal_cycles": len(normal),
             "false_alarms": false_alarms,
             "far_per_1000_cycles": 1000.0 * false_alarms / len(normal) if len(normal) else math.nan,
             "far_ci_lower_per_1000": 1000.0 * far_low,
             "far_ci_upper_per_1000": 1000.0 * far_high,
-            "anomaly_cycles": int(len(anomalous)),
+            "anomaly_cycles": len(anomalous),
             "detected_anomalies": hits,
             "pod": hits / len(anomalous) if len(anomalous) else math.nan,
             "pod_ci_lower": pod_low,

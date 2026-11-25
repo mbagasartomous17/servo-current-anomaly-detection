@@ -9,7 +9,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import ConstantKernel, RBF, WhiteKernel
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
 
 from .calibration import conformal_quantile, cycle_run_score
 from .schema import JOINTS, cycle_groups, normal_only, validate_frame
@@ -98,7 +98,7 @@ class PhaseAwareGPRDetector:
         training: pd.DataFrame,
         scale: pd.DataFrame,
         calibration: pd.DataFrame,
-    ) -> "PhaseAwareGPRDetector":
+    ) -> PhaseAwareGPRDetector:
         """Fit the model, residual scales, and normal-cycle thresholds."""
         train = normal_only(validate_frame(training, name="training"), name="training")
         scale_df = normal_only(validate_frame(scale, name="scale"), name="scale")
@@ -303,7 +303,7 @@ class PhaseAwareGPRDetector:
         joblib.dump(self, path)
 
     @classmethod
-    def load(cls, path: str) -> "PhaseAwareGPRDetector":
+    def load(cls, path: str) -> PhaseAwareGPRDetector:
         """Load a detector previously saved with save()."""
         loaded = joblib.load(path)
         if not isinstance(loaded, cls):

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-11-25
+
+- Fix six Ruff lint findings so the CI lint step can pass: remove redundant integer casts, sort Gaussian-process kernel imports, and simplify postponed self-referential type annotations.
+- No detector behavior or data schema changed from version 0.2.0.
+
 ## 0.2.0 — 2026-11-25
 
 - Center normalized residuals by their robust median within each progress bin.
