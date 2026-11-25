@@ -19,3 +19,11 @@ randomly split adjacent samples from the same cycle across partitions.
 
 The six channel names are a generic example schema. Rename or map the columns in a
 preprocessing step for other numbers of channels or different measurement units.
+
+## Cycle integrity rules
+
+- `(station_id, cycle_id)` must uniquely identify one complete cycle.
+- A cycle label, when supplied, must be constant across all samples in that cycle.
+- If `time_ms` is supplied, it must be non-decreasing as `progress` increases.
+- A complete cycle must remain wholly inside one partition. The fitting API rejects
+  cycles shared by training, scale, and calibration partitions.

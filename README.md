@@ -1,6 +1,6 @@
 # Servo Current Anomaly Detection
 
-A small, research-oriented Python toolkit for **phase-aware anomaly detection in
+A small, research-oriented Python toolkit (current release: **0.2.0**) for **phase-aware anomaly detection in
 multichannel servo motor current signals**. It demonstrates a transparent baseline:
 one Gaussian Process Regression (GPR) model per current channel, robust residual
 scaling by movement progress, and a split-conformal cycle threshold.
@@ -51,6 +51,12 @@ Generate four independent partitions:
 servo-current-detector make-synthetic --output examples/synthetic_data
 ```
 
+On Windows PowerShell, the complete synthetic walkthrough can also be run with:
+
+```powershell
+.\examples\run_synthetic_demo.ps1
+```
+
 Fit and calibrate an exploratory model:
 
 ```bash
@@ -99,7 +105,9 @@ Before using real data:
 
 ## Method and limitations
 
-Read [`docs/method.md`](docs/method.md) before interpreting results. In particular,
+Read [`docs/method.md`](docs/method.md) before interpreting results. One reproducible
+synthetic run is documented in [`docs/synthetic_demo.md`](docs/synthetic_demo.md); it
+includes false alarms as well as detections and is explicitly not an industrial benchmark. In particular,
 conformal calibration assumes exchangeability of normal cycles; changes in tooling,
 loads, speed, trajectory, temperature, or maintenance state may invalidate the
 nominal false-alarm level. Synthetic fault injection measures sensitivity to the
@@ -120,6 +128,10 @@ MIT. See [`LICENSE`](LICENSE).
 
 ## Project status
 
-Alpha research software. The package is a reproducible starting point, not a completed
-validated detector. Real-world performance, generalization across machines, and
-operational safety have not been established by this repository.
+**Alpha research software — version 0.2.0.** This release centers residuals by the
+local median learned from the scale partition. Refit any detector serialized with
+version 0.1.x before using it with this release.
+
+The package is a reproducible starting point, not a completed validated detector.
+Real-world performance, generalization across machines, and operational safety have
+not been established by this repository.

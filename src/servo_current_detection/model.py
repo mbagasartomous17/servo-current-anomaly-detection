@@ -54,6 +54,7 @@ class PhaseAwareGPRDetector:
     def __init__(self, config: DetectorConfig | None = None) -> None:
         self.config = config or DetectorConfig()
         self.models_: dict[tuple[str, str], GaussianProcessRegressor] = {}
+        self.residual_centers_: dict[tuple[str, str], np.ndarray] = {}
         self.scales_: dict[tuple[str, str], np.ndarray] = {}
         self.thresholds_: dict[str, float] = {}
         self.stations_: tuple[str, ...] = ()
@@ -107,12 +108,40 @@ class PhaseAwareGPRDetector:
         stations = sorted(set(train["station_id"].astype(str)))
         if not stations:
             raise ValueError("training must contain at least one station")
-        for dataset_name, dataset in (("scale", scale_df), ("calibration", calibration_df)):
-            missing = set(stations) - set(dataset["station_id"].astype(str))
-            if missing:
-                raise ValueError(f"{dataset_name} is missing stations present in training: {sorted(missing)}")
+
+        expected_stations = set(stations)
+        partitions = {
+            "training": train,
+            "scale": scale_df,
+            "calibration": calibration_df,
+        }
+        cycle_keys: dict[str, set[tuple[str, str]]] = {}
+        for name, partition in partitions.items():
+            found_stations = set(partition["station_id"].astype(str))
+            if found_stations != expected_stations:
+                missing = sorted(expected_stations - found_stations)
+                unexpected = sorted(found_stations - expected_stations)
+                raise ValueError(
+                    f"{name} station mismatch; missing={missing}, unexpected={unexpected}"
+                )
+            cycle_keys[name] = set(zip(
+                partition["station_id"].astype(str),
+                partition["cycle_id"].astype(str),
+            ))
+
+        names = list(cycle_keys)
+        for index, left_name in enumerate(names):
+            for right_name in names[index + 1:]:
+                overlap = cycle_keys[left_name] & cycle_keys[right_name]
+                if overlap:
+                    examples = sorted(overlap)[:3]
+                    raise ValueError(
+                        f"Cycle leakage between {left_name} and {right_name}; "
+                        f"shared (station_id, cycle_id) examples: {examples}"
+                    )
 
         self.models_.clear()
+        self.residual_centers_.clear()
         self.scales_.clear()
         self.thresholds_.clear()
         self.stations_ = tuple(stations)
@@ -140,9 +169,11 @@ class PhaseAwareGPRDetector:
                 residual = residual_frame[joint].to_numpy(dtype=float) - regressor.predict(
                     residual_frame["progress"].to_numpy(dtype=float).reshape(-1, 1)
                 )
-                self.scales_[(station, joint)] = self._fit_robust_scale(
+                centers, scales = self._fit_robust_statistics(
                     residual_frame["progress"].to_numpy(dtype=float), residual
                 )
+                self.residual_centers_[(station, joint)] = centers
+                self.scales_[(station, joint)] = scales
 
         self.is_fitted_ = True
         self.is_calibrated_ = False
@@ -155,23 +186,45 @@ class PhaseAwareGPRDetector:
         self.is_calibrated_ = True
         return self
 
-    def _fit_robust_scale(self, progress: np.ndarray, residual: np.ndarray) -> np.ndarray:
+    def _fit_robust_statistics(
+        self, progress: np.ndarray, residual: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Estimate local residual medians and MAD scales by progress bin.
+
+        The residual center is important: scoring ``abs(residual)`` without
+        subtracting the normal residual median can mistake a systematic model
+        bias for an anomaly. Sparse bins fall back to global robust statistics.
+        """
         edges = np.linspace(0.0, 1.0, self.config.n_bins + 1)
         indices = np.clip(np.digitize(progress, edges) - 1, 0, self.config.n_bins - 1)
-        global_mad = np.median(np.abs(residual - np.median(residual)))
-        global_scale = max(1.4826 * float(global_mad), self.config.scale_floor_pct)
-        output = np.full(self.config.n_bins, global_scale, dtype=float)
+
+        global_center = float(np.median(residual))
+        global_mad = float(np.median(np.abs(residual - global_center)))
+        global_scale = max(1.4826 * global_mad, self.config.scale_floor_pct)
+        centers = np.full(self.config.n_bins, global_center, dtype=float)
+        scales = np.full(self.config.n_bins, global_scale, dtype=float)
+
         for bin_id in range(self.config.n_bins):
             values = residual[indices == bin_id]
             if values.size >= self.config.min_bin_samples:
-                mad = np.median(np.abs(values - np.median(values)))
-                output[bin_id] = max(1.4826 * float(mad), self.config.scale_floor_pct)
-        return output
+                center = float(np.median(values))
+                mad = float(np.median(np.abs(values - center)))
+                centers[bin_id] = center
+                scales[bin_id] = max(1.4826 * mad, self.config.scale_floor_pct)
+        return centers, scales
 
-    def _scale_for(self, station: str, joint: str, progress: np.ndarray) -> np.ndarray:
+    def _bin_values(
+        self, station: str, joint: str, progress: np.ndarray, source: dict
+    ) -> np.ndarray:
         edges = np.linspace(0.0, 1.0, self.config.n_bins + 1)
         indices = np.clip(np.digitize(progress, edges) - 1, 0, self.config.n_bins - 1)
-        return self.scales_[(station, joint)][indices]
+        return source[(station, joint)][indices]
+
+    def _scale_for(self, station: str, joint: str, progress: np.ndarray) -> np.ndarray:
+        return self._bin_values(station, joint, progress, self.scales_)
+
+    def _center_for(self, station: str, joint: str, progress: np.ndarray) -> np.ndarray:
+        return self._bin_values(station, joint, progress, self.residual_centers_)
 
     def score_samples(self, data: pd.DataFrame) -> pd.DataFrame:
         """Return per-sample normalized residuals and a six-joint max score."""
@@ -189,9 +242,11 @@ class PhaseAwareGPRDetector:
             progress = station_data["progress"].to_numpy(dtype=float)
             for joint in JOINTS:
                 prediction = self.models_[(station, joint)].predict(progress.reshape(-1, 1))
+                center = self._center_for(station, joint, progress)
                 scale = self._scale_for(station, joint, progress)
                 score_col = f"score_{joint.removesuffix('_pct')}"
-                values = np.abs(station_data[joint].to_numpy(dtype=float) - prediction) / scale
+                residual = station_data[joint].to_numpy(dtype=float) - prediction
+                values = np.abs(residual - center) / scale
                 result.loc[mask, score_col] = values
                 if score_col not in joint_score_columns:
                     joint_score_columns.append(score_col)
@@ -203,6 +258,11 @@ class PhaseAwareGPRDetector:
         scored = self.score_samples(data)
         records: list[dict[str, Any]] = []
         for (station, cycle_id), group in cycle_groups(scored):
+            if len(group) < self.config.consecutive:
+                raise ValueError(
+                    f"Cycle {(station, cycle_id)} has {len(group)} samples; "
+                    f"at least {self.config.consecutive} are required"
+                )
             records.append({
                 "station_id": str(station),
                 "cycle_id": str(cycle_id),

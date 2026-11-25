@@ -68,6 +68,20 @@ def validate_frame(
     result = result.sort_values(
         ["station_id", "cycle_id", "progress"], kind="stable"
     ).reset_index(drop=True)
+
+    grouped = result.groupby(["station_id", "cycle_id"], sort=False, dropna=False)
+    if "label" in result.columns and (grouped["label"].nunique(dropna=False) > 1).any():
+        raise DataValidationError(
+            f"{name}.label must be constant within each station_id/cycle_id"
+        )
+    if "time_ms" in result.columns:
+        non_monotonic = grouped["time_ms"].apply(
+            lambda values: bool((values.diff().dropna() < 0).any())
+        )
+        if non_monotonic.any():
+            raise DataValidationError(
+                f"{name}.time_ms must be non-decreasing with progress within each cycle"
+            )
     return result
 
 

@@ -29,3 +29,17 @@ def test_validate_frame_rejects_invalid_labels():
     frame.loc[0, "label"] = 3
     with pytest.raises(DataValidationError):
         validate_frame(frame)
+
+
+def test_validate_frame_rejects_inconsistent_cycle_labels():
+    frame = sample_frame()
+    frame.loc[1, "label"] = 1
+    with pytest.raises(DataValidationError, match="constant within"):
+        validate_frame(frame)
+
+
+def test_validate_frame_rejects_decreasing_time_with_progress():
+    frame = sample_frame()
+    frame["time_ms"] = [10.0, 5.0]
+    with pytest.raises(DataValidationError, match="non-decreasing"):
+        validate_frame(frame)

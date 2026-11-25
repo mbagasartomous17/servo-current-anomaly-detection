@@ -47,7 +47,8 @@ def _make_cycle(
         else:
             raise ValueError("shape must be 'ramp', 'quadratic', or 'step'")
         joint_pattern = np.array([0.20, 0.45, 1.00, 0.25, 0.55, 0.35])
-        signal += profile[:, None] * amplitude_pct * joint_pattern[None, :]
+        direction = float(rng.choice([-1.0, 1.0]))
+        signal += direction * profile[:, None] * amplitude_pct * joint_pattern[None, :]
 
     table = pd.DataFrame(signal, columns=JOINTS)
     table.insert(0, "progress", progress)

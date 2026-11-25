@@ -4,7 +4,7 @@ title: "Servo Current Anomaly Detection"
 authors:
   - family-names: "Pratama"
     given-names: "Mochammad Bagas Sandika"
-version: 0.1.0
+version: 0.2.0
 date-released: 2026-11-25
 license: MIT
 type: software
