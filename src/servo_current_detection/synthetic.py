@@ -35,8 +35,10 @@ def _make_cycle(
         currents.append(base + cycle_drift + noise)
 
     signal = np.column_stack(currents)
+    onset_time_ms = np.nan
     if anomalous:
         onset = int(rng.integers(18, 45))
+        onset_time_ms = float(onset * 4.0)
         ramp = np.clip((np.arange(n) - onset) / max(1, n - onset - 1), 0.0, 1.0)
         if shape == "ramp":
             profile = ramp
@@ -56,6 +58,7 @@ def _make_cycle(
     table.insert(0, "cycle_id", cycle_id)
     table["label"] = int(anomalous)
     table["time_ms"] = np.arange(n, dtype=float) * 4.0  # synthetic 250 Hz example
+    table["event_onset_time_ms"] = onset_time_ms
     return table
 
 

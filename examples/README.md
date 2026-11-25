@@ -1,17 +1,15 @@
-# Synthetic Examples
+# Examples
 
-This directory contains a reproducible, process-agnostic synthetic-data walkthrough.
-It does not contain industrial telemetry.
-
-After installing the package with `python -m pip install -e ".[dev]"`, run the full
-example on Windows PowerShell from the repository root:
+Run the deterministic synthetic comparison benchmark from the repository root:
 
 ```powershell
 .\examples\run_synthetic_demo.ps1
 ```
 
-The script writes generated CSV files to `examples/synthetic_data/`, the fitted model
-to `artifacts/`, and evaluation metrics to `results/`. Those generated outputs are
-excluded by `.gitignore` so they are not accidentally committed.
+Or use the `make-synthetic` and `benchmark` commands shown in the main README and
+[`docs/benchmarking.md`](../docs/benchmarking.md).
 
-For manual or non-Windows execution, follow the commands in the main README.
+Generated CSV datasets and benchmark outputs are written to `examples/synthetic_data/`
+and `results/benchmark/`. Those generated files are git-ignored by default. The
+included generator contains synthetic signals only; do not replace them with proprietary
+production telemetry in a public commit.

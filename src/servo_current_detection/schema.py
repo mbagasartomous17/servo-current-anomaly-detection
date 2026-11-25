@@ -9,7 +9,7 @@ import pandas as pd
 
 JOINTS = tuple(f"current_j{i}_pct" for i in range(1, 7))
 REQUIRED_COLUMNS = ("cycle_id", "station_id", "progress", *JOINTS)
-OPTIONAL_COLUMNS = ("label", "time_ms")
+OPTIONAL_COLUMNS = ("label", "time_ms", "event_onset_time_ms")
 
 
 class DataValidationError(ValueError):
@@ -48,6 +48,17 @@ def validate_frame(
         result[col] = pd.to_numeric(result[col], errors="coerce")
         if not np.isfinite(result[col].to_numpy(dtype=float)).all():
             raise DataValidationError(f"{name}.{col} contains non-numeric or non-finite values")
+    if "event_onset_time_ms" in result.columns:
+        result["event_onset_time_ms"] = pd.to_numeric(
+            result["event_onset_time_ms"], errors="coerce"
+        )
+        onset = result["event_onset_time_ms"].to_numpy(dtype=float)
+        if np.isinf(onset).any():
+            raise DataValidationError(f"{name}.event_onset_time_ms contains infinite values")
+        if "time_ms" not in result.columns or "label" not in result.columns:
+            raise DataValidationError(
+                f"{name}.event_onset_time_ms requires both time_ms and label columns"
+            )
 
     progress = result["progress"].to_numpy(dtype=float)
     if np.any((progress < 0.0) | (progress > 1.0)):
@@ -82,6 +93,25 @@ def validate_frame(
             raise DataValidationError(
                 f"{name}.time_ms must be non-decreasing with progress within each cycle"
             )
+    if "event_onset_time_ms" in result.columns:
+        for (station, cycle_id), cycle in grouped:
+            onset = cycle["event_onset_time_ms"].dropna().unique()
+            label = int(cycle["label"].iloc[0])
+            if label == 1 and (
+                len(onset) != 1 or cycle["event_onset_time_ms"].isna().any()
+            ):
+                raise DataValidationError(
+                    f"{name}.event_onset_time_ms must contain one consistent onset "
+                    f"on every row of anomalous cycle {(station, cycle_id)}"
+                )
+            if label == 0 and len(onset) != 0:
+                raise DataValidationError(
+                    f"{name}.event_onset_time_ms must be empty for normal cycle "
+                    f"{(station, cycle_id)}"
+                )
+            # Do not require onset to fall inside the supplied time window: callers
+            # may validate a deliberately cropped cycle window, where the annotated
+            # event onset can be outside the retained samples.
     return result
 
 

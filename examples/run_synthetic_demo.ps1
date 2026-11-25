@@ -4,25 +4,21 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 
 $DataDir = Join-Path $RepoRoot "examples/synthetic_data"
-$ModelPath = Join-Path $RepoRoot "artifacts/demo_detector.joblib"
-$MetricsPath = Join-Path $RepoRoot "results/synthetic_metrics.csv"
+$ResultsDir = Join-Path $RepoRoot "results/benchmark"
 
 Write-Host "Generating deterministic synthetic partitions..."
 servo-current-detector make-synthetic --output $DataDir --seed 2026
 
-Write-Host "Fitting the exploratory GPR detector..."
-servo-current-detector fit `
+Write-Host "Running the six-method cycle-level benchmark..."
+servo-current-detector benchmark `
   --training (Join-Path $DataDir "training.csv") `
   --scale (Join-Path $DataDir "scale.csv") `
   --calibration (Join-Path $DataDir "calibration.csv") `
-  --model-out $ModelPath `
-  --alpha 0.05
-
-Write-Host "Evaluating the labelled synthetic test partition..."
-servo-current-detector evaluate `
-  --model $ModelPath `
   --test (Join-Path $DataDir "test.csv") `
-  --output $MetricsPath
+  --output-dir $ResultsDir `
+  --alpha 0.05 `
+  --consecutive 3 `
+  --seed 2026
 
-Write-Host "Demo complete. Metrics saved to: $MetricsPath"
-Write-Warning "These metrics use synthetic signals only; they are not evidence of industrial performance."
+Write-Host "Benchmark complete. Results saved to: $ResultsDir"
+Write-Warning "This workflow uses synthetic signals only; it is not evidence of industrial performance."

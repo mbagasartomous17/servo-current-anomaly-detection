@@ -60,3 +60,13 @@ It does not prove detection performance on a real industrial process, estimate c
 force, identify mechanical root cause, or control/stop a robot. Real-world claims
 require independently authorized data, ground-truth labels, time-separated testing,
 confidence intervals, and review by qualified engineers.
+
+
+## Benchmark comparisons (version 0.3.0)
+
+The benchmark module compares the GPR reference with global robust, progress-binned
+robust, Isolation Forest, LOF novelty, and One-Class SVM baselines. All methods use the
+same training, scale, calibration, and test partitions and the same cycle-level
+consecutive-sample decision rule. Calibration thresholds are computed separately for
+each method and station. See [`benchmarking.md`](benchmarking.md) for the exact
+protocol, metrics, and synthetic example.

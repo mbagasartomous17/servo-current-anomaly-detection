@@ -43,3 +43,12 @@ def test_validate_frame_rejects_decreasing_time_with_progress():
     frame["time_ms"] = [10.0, 5.0]
     with pytest.raises(DataValidationError, match="non-decreasing"):
         validate_frame(frame)
+
+
+def test_validate_frame_rejects_inconsistent_event_onset_within_cycle():
+    frame = sample_frame()
+    frame["label"] = [1, 1]
+    frame["time_ms"] = [0.0, 4.0]
+    frame["event_onset_time_ms"] = [0.0, 4.0]
+    with pytest.raises(DataValidationError, match="one consistent onset"):
+        validate_frame(frame)

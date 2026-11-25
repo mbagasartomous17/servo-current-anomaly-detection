@@ -26,37 +26,51 @@ def clopper_pearson(successes: int, trials: int, confidence: float = 0.95) -> tu
     return lower, upper
 
 
-def evaluate(
-    detector: PhaseAwareGPRDetector,
-    test: pd.DataFrame,
+def evaluate_predictions(
+    prediction: pd.DataFrame,
     *,
     confidence: float = 0.95,
-) -> pd.DataFrame:
-    """Evaluate normal false alarms and labelled anomaly detection by station.
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Summarize an already-scored, already-thresholded prediction table.
 
-    FAR is reported per 1,000 normal cycles; POD is reported on labelled anomalous
-    cycles. Both include two-sided exact Clopper-Pearson confidence intervals.
-    Detection latency is only reported when `time_ms` exists.
+    Returns ``(station_summary, cycle_details)``. Detection latency is computed only
+    when the input has an explicit ``event_onset_time_ms`` ground-truth column. It is
+    never inferred from cycle start, because cycle-start-to-alarm is not fault latency.
     """
     if not 0.0 < confidence < 1.0:
         raise ValueError("confidence must be between 0 and 1")
-    frame = validate_frame(test, name="test", require_label=True)
-    prediction = detector.predict_samples(frame)
-    rows: list[dict[str, float | int | str]] = []
+    frame = validate_frame(prediction, name="prediction", require_label=True)
+    missing = [name for name in ("alarm", "anomaly_score") if name not in frame.columns]
+    if missing:
+        raise ValueError(f"prediction is missing required columns: {missing}")
 
-    for (station, cycle_id), group in cycle_groups(prediction):
-        alarm_rows = group[group["alarm"]]
+    rows: list[dict[str, float | int | str | bool]] = []
+    for (station, cycle_id), group in cycle_groups(frame):
+        alarm_rows = group[group["alarm"].astype(bool)]
+        label = int(group["label"].iloc[0])
         detected = not alarm_rows.empty
-        label = int(group["label"].max())
+        pre_onset_alarm = False
         latency = math.nan
-        if detected and label == 1 and "time_ms" in group.columns:
-            first_time = float(group["time_ms"].min())
-            latency = float(alarm_rows.iloc[0]["time_ms"]) - first_time
+        if (
+            label == 1
+            and "event_onset_time_ms" in group.columns
+            and "time_ms" in group.columns
+        ):
+            onset_values = group["event_onset_time_ms"].dropna().unique()
+            if len(onset_values) == 1:
+                onset = float(onset_values[0])
+                before = alarm_rows[alarm_rows["time_ms"] < onset]
+                after = alarm_rows[alarm_rows["time_ms"] >= onset]
+                pre_onset_alarm = not before.empty
+                detected = not after.empty
+                if detected:
+                    latency = float(after.iloc[0]["time_ms"]) - onset
         rows.append({
             "station_id": str(station),
             "cycle_id": str(cycle_id),
             "label": label,
             "detected": int(detected),
+            "pre_onset_alarm": bool(pre_onset_alarm),
             "latency_ms": latency,
         })
 
@@ -66,20 +80,21 @@ def evaluate(
         normal = group[group["label"] == 0]
         anomalous = group[group["label"] == 1]
         false_alarms = int(normal["detected"].sum())
+        pre_onset_alarms = int(anomalous["pre_onset_alarm"].sum())
         hits = int(anomalous["detected"].sum())
         far_low, far_high = clopper_pearson(false_alarms, len(normal), confidence)
         pod_low, pod_high = clopper_pearson(hits, len(anomalous), confidence)
         detected_anomalies = anomalous[anomalous["detected"] == 1]
-        median_latency = (
-            float(np.median(detected_anomalies["latency_ms"].dropna()))
-            if "time_ms" in prediction.columns and not detected_anomalies["latency_ms"].dropna().empty
-            else math.nan
-        )
+        available_latency = detected_anomalies["latency_ms"].dropna()
+        median_latency = float(np.median(available_latency)) if not available_latency.empty else math.nan
         summary.append({
             "station_id": str(station),
             "normal_cycles": len(normal),
             "false_alarms": false_alarms,
-            "far_per_1000_cycles": 1000.0 * false_alarms / len(normal) if len(normal) else math.nan,
+            "pre_onset_alarms": pre_onset_alarms,
+            "far_per_1000_cycles": (
+                1000.0 * false_alarms / len(normal) if len(normal) else math.nan
+            ),
             "far_ci_lower_per_1000": 1000.0 * far_low,
             "far_ci_upper_per_1000": 1000.0 * far_high,
             "anomaly_cycles": len(anomalous),
@@ -90,4 +105,22 @@ def evaluate(
             "median_detection_latency_ms": median_latency,
             "confidence_level": confidence,
         })
-    return pd.DataFrame(summary)
+    return pd.DataFrame(summary), cycles
+
+
+def evaluate(
+    detector: PhaseAwareGPRDetector,
+    test: pd.DataFrame,
+    *,
+    confidence: float = 0.95,
+) -> pd.DataFrame:
+    """Evaluate normal false alarms and labelled anomaly detection by station.
+
+    FAR is reported per 1,000 normal cycles; POD is reported on labelled anomalous
+    cycles. Both include two-sided exact Clopper-Pearson confidence intervals.
+    Latency is reported only when ground-truth event onset is explicitly supplied.
+    """
+    frame = validate_frame(test, name="test", require_label=True)
+    prediction = detector.predict_samples(frame)
+    summary, _cycles = evaluate_predictions(prediction, confidence=confidence)
+    return summary
